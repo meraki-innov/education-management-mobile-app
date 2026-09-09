@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../auth_service.dart'; // adjust path to wherever you save auth_service.dart
 
-// STEP 1 of clean architecture: a Riverpod provider replaces the local
-// `_isLoading` bool. Later this will move into its own file and call a
-// real AuthRepository — for now it lives right here so the change is small.
 final loginLoadingProvider = StateProvider<bool>((ref) => false);
 
-// ConsumerStatefulWidget = StatefulWidget + access to `ref` for providers.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -16,12 +13,11 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  // These stay as plain local state — they're pure UI concerns
-  // (what's typed, whether the password is hidden), nothing Riverpod
-  // needs to manage.
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
+
+  final _authService = AuthService();
 
   @override
   void dispose() {
@@ -30,23 +26,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  void _handleLogin() {
-    // This is where you'll call your teammate's Go API later.
-    // ref.read(...notifier) triggers a change without rebuilding this
-    // whole widget for the change itself — only widgets that ref.watch()
-    // this provider will rebuild.
+  Future<void> _handleLogin() async {
     ref.read(loginLoadingProvider.notifier).state = true;
 
-    // TODO: replace this with a real API call, something like:
-    // final response = await authService.login(
-    //   _emailController.text,
-    //   _passwordController.text,
-    // );
-
-    Future.delayed(const Duration(seconds: 1), () {
+    try {
+      await _authService.login(
+        emailOrPhone: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+      // login succeeded — navigate to home screen here
+      // Navigator.of(context).pushReplacementNamed('/home');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    } finally {
       ref.read(loginLoadingProvider.notifier).state = false;
-      // navigate to home screen on success
-    });
+    }
   }
 
   @override
@@ -62,14 +60,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               constraints: const BoxConstraints(maxWidth: 400),
               padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6), // light gray card
+                color: const Color(0xFFF3F4F6),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Logo — small blue square with a mountain icon.
                   Center(
                     child: Container(
                       width: 56,
@@ -88,7 +85,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 16),
 
                   const Text(
-                    'Welcome Back',
+                    'Welcome',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 24,
@@ -104,10 +101,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Email or Phone field
                   const Text(
                     'Email or Phone Number *',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E3A8A),
+                    ),
                   ),
                   const SizedBox(height: 6),
                   TextField(
@@ -116,10 +116,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Password field
                   const Text(
                     'Password *',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E3A8A),
+                    ),
                   ),
                   const SizedBox(height: 6),
                   TextField(
@@ -166,8 +169,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Login button — reads loginLoadingProvider with ref.watch,
-                  // so this Consumer rebuilds when the provider changes.
                   Consumer(
                     builder: (context, ref, child) {
                       final isLoading = ref.watch(loginLoadingProvider);
