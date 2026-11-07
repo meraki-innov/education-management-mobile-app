@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../auth_service.dart'; // adjust path to wherever you save auth_service.dart
-
-final loginLoadingProvider = StateProvider<bool>((ref) => false);
+import '../features/auth/presentation/providers/login_provider.dart';
+import 'dashboard.dart';
+import 'teacher_dashboard_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -17,8 +17,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
 
-  final _authService = AuthService();
-
   @override
   void dispose() {
     _emailController.dispose();
@@ -26,29 +24,59 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
-    ref.read(loginLoadingProvider.notifier).state = true;
-
-    try {
-      await _authService.login(
-        emailOrPhone: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      // login succeeded — navigate to home screen here
-      // Navigator.of(context).pushReplacementNamed('/home');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+  void _handleLogin() {
+    ref
+        .read(loginControllerProvider.notifier)
+        .login(
+          emailOrPhone: _emailController.text.trim(),
+          password: _passwordController.text,
         );
-      }
-    } finally {
-      ref.read(loginLoadingProvider.notifier).state = false;
+  }
+
+  void _navigateToDashboard(String role) {
+    Widget destination;
+
+    switch (role) {
+      case 'student':
+        destination = const DashboardScreen();
+        break;
+      case 'teacher':
+        destination = const TeacherDashboardScreen();
+        break;
+      default:
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Unrecognized role: $role')));
+        return;
     }
+
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => destination));
   }
 
   @override
   Widget build(BuildContext context) {
+    // Reacts to state changes without rebuilding this widget:
+    // error -> show SnackBar, data (a real role, not the empty initial
+    // value) -> navigate.
+    ref.listen<AsyncValue<String>>(loginControllerProvider, (previous, next) {
+      next.whenOrNull(
+        error: (error, _) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(error.toString().replaceFirst('Exception: ', '')),
+            ),
+          );
+        },
+        data: (role) {
+          if (previous is AsyncLoading && role.isNotEmpty) {
+            _navigateToDashboard(role);
+          }
+        },
+      );
+    });
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -171,7 +199,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                   Consumer(
                     builder: (context, ref, child) {
-                      final isLoading = ref.watch(loginLoadingProvider);
+                      final loginState = ref.watch(loginControllerProvider);
+                      final isLoading = loginState.isLoading;
                       return SizedBox(
                         height: 48,
                         child: ElevatedButton(
